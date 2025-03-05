@@ -5,16 +5,18 @@
 sudo apt update -y
 sudo apt install nginx -y
 
-# code to add header to display hostname
-string_for_replacement="server_name _;\n\tadd_header X-Served-By \$hostname;"
-sudo sed -i "s/server_name _;/$string_for_replacement/" /etc/nginx/sites-enabled/default
+# Get the hostname
+HOSTNAME=$(hostname)
+
+# Add header to Nginx configuration
+sudo sed -i "/server_name _;/a \    add_header X-Served-By $HOSTNAME;" /etc/nginx/sites-enabled/default
 
 # Test Nginx configuration
 sudo nginx -t
 
 # If the test is successful, restart Nginx
 if [ $? -eq 0 ]; then
-    sudo service nginx restart
+    sudo systemctl restart nginx
     echo "Nginx configuration updated and restarted successfully."
 else
     echo "Nginx configuration test failed. Please check the configuration."
