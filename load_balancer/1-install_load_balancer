@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# This script configures Nginx to add a custom HTTP header with the server's hostname.
+# This script configures Nginx as a load balancer between web-01 and web-02 servers
 
 # Update package list and install Nginx
 echo "Updating package list and installing Nginx..."
@@ -10,9 +10,37 @@ sudo apt install nginx -y
 HOSTNAME=$(hostname)
 echo "Host name is: $HOSTNAME"
 
-# Modify Nginx configuration to add the custom header
-echo "Modifying Nginx configuration..."
-sudo sed -i "/server_name _;/a \    add_header X-Served-By \"$HOSTNAME\";" /etc/nginx/sites-available/default
+# Create a new Nginx configuration file for load balancing
+echo "Creating load balancer configuration..."
+sudo tee /etc/nginx/sites-available/load_balancer << 'EOC'
+upstream backend {
+    # Replace these with your actual web server IPs
+    server 3.86.231.113:80 weight=1;  # web-01
+    server 3.83.164.61:80 weight=1;  # web-02
+}
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name _;
+
+    # Add custom header with hostname
+    add_header X-Served-By "$HOSTNAME";
+
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+EOC
+# Replace $HOSTNAME placeholder with actual hostname
+sudo sed -i "s/\\\$HOSTNAME/$HOSTNAME/" /etc/nginx/sites-available/load_balancer
+
+# Enable the new configuration and disable the default one
+sudo ln -sf /etc/nginx/sites-available/load_balancer /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
 
 # Test the Nginx configuration to ensure it's valid
 echo "Testing Nginx configuration..."
@@ -23,6 +51,7 @@ if [ $? -eq 0 ]; then
     echo "Nginx configuration is valid. Restarting Nginx..."
     sudo systemctl restart nginx
     echo "Nginx restarted successfully."
+    echo "Load balancer configured to distribute traffic between web-01 and web-02"
 else
     echo "Nginx configuration test failed. Please check the configuration."
     exit 1
