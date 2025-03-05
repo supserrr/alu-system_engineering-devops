@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Configure Nginx with custom HTTP header on a fresh Ubuntu machine
+# This script configures Nginx to add a custom HTTP header with the server's hostname
 
-# Update the package list and install Nginx
+# Update package list and install Nginx
 echo "Updating package list and installing Nginx..."
 sudo apt update -y
 sudo apt install nginx -y
