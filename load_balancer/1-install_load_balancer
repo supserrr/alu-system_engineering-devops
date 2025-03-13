@@ -1,28 +1,58 @@
 #!/usr/bin/env bash
-# Create a script to install and configure HAProxy on lb-01 server
-# Configure HAProxy to send traffic to web-01 and web-02 servers
-# Distribute requests using a roundrobin algorithm
-# Make sure that HAProxy can be managed via an init script
-# Install and configure HAproxy on my lb-01 server.
-sudo apt-get -y update
-apt-get -y install haproxy
+# This script configures Nginx as a load balancer between web-01 and web-02 servers
 
-# edit config file
-server_config=\
-"
-frontend supserrr-frontend
-        bind *:80
-        mode http
-        default_backend oreste-backend
-backend supserrr-backend
-        balance roundrobin
-        server 6485-web-01 3.86.231.113:80 check
-        server 6485-web-02 3.83.164.61:80 check
-"
-echo "$server_config" | sudo tee -a /etc/haproxy/haproxy.cfg
+# Update package list and install Nginx
+echo "Updating package list and installing Nginx..."
+sudo apt update -y
+sudo apt install nginx -y
 
-# enable haproxy to be started by init script
+# Get the hostname of the server
+HOSTNAME=$(hostname)
+echo "Host name is: $HOSTNAME"
 
-echo "ENABLED=1" | sudo tee -a /etc/default/haproxy
+# Create a new Nginx configuration file for load balancing
+echo "Creating load balancer configuration..."
+sudo tee /etc/nginx/sites-available/load_balancer << 'EOC'
+upstream backend {
+    # Replace these with your actual web server IPs
+    server 3.86.231.113:80 weight=1;  # web-01
+    server 3.83.164.61:80 weight=1;  # web-02
+}
 
-sudo service haproxy restart
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+
+    server_name _;
+
+    # Add custom header with hostname
+    add_header X-Served-By "$HOSTNAME";
+
+    location / {
+        proxy_pass http://backend;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+EOC
+# Replace $HOSTNAME placeholder with actual hostname
+sudo sed -i "s/\\\$HOSTNAME/$HOSTNAME/" /etc/nginx/sites-available/load_balancer
+
+# Enable the new configuration and disable the default one
+sudo ln -sf /etc/nginx/sites-available/load_balancer /etc/nginx/sites-enabled/
+sudo rm -f /etc/nginx/sites-enabled/default
+
+# Test the Nginx configuration to ensure it's valid
+echo "Testing Nginx configuration..."
+sudo nginx -t
+
+# If the configuration test is successful, restart Nginx to apply changes
+if [ $? -eq 0 ]; then
+    echo "Nginx configuration is valid. Restarting Nginx..."
+    sudo systemctl restart nginx
+    echo "Nginx restarted successfully."
+    echo "Load balancer configured to distribute traffic between web-01 and web-02"
+else
+    echo "Nginx configuration test failed. Please check the configuration."
+    exit 1
+fi

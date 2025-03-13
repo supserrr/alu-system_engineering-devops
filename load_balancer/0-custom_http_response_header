@@ -1,21 +1,28 @@
 #!/usr/bin/env bash
-# Configure Nginx with custom HTTP header
+# This script configures Nginx to add a custom HTTP header with the server's hostname
 
-# Update and install Nginx
+# Update package list and install Nginx
+echo "Updating package list and installing Nginx..."
 sudo apt update -y
 sudo apt install nginx -y
 
-# code to add header to display hostname
-string_for_replacement="server_name _;\n\tadd_header X-Served-By \$hostname;"
-sudo sed -i "s/server_name _;/$string_for_replacement/" /etc/nginx/sites-enabled/default
+# Get the hostname of the server
+HOSTNAME=$(hostname)
+echo "Host name is: $HOSTNAME"
 
-# Test Nginx configuration
+# Modify Nginx configuration to add the custom header
+echo "Modifying Nginx configuration..."
+sudo sed -i "/server_name _;/a \    add_header X-Served-By $HOSTNAME;" /etc/nginx/sites-available/default
+
+# Test the Nginx configuration to ensure it's valid
+echo "Testing Nginx configuration..."
 sudo nginx -t
 
-# If the test is successful, restart Nginx
+# If the configuration test is successful, restart Nginx to apply changes
 if [ $? -eq 0 ]; then
-    sudo service nginx restart
-    echo "Nginx configuration updated and restarted successfully."
+    echo "Nginx configuration is valid. Restarting Nginx..."
+    sudo systemctl restart nginx
+    echo "Nginx restarted successfully."
 else
     echo "Nginx configuration test failed. Please check the configuration."
     exit 1
