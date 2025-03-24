@@ -1,58 +1,37 @@
 #!/usr/bin/env bash
-# This script configures Nginx as a load balancer between web-01 and web-02 servers
+# Script to install and configure HAProxy on lb-01 server
 
-# Update package list and install Nginx
-echo "Updating package list and installing Nginx..."
-sudo apt update -y
-sudo apt install nginx -y
+# Update system and install HAProxy
+sudo apt-get -y update
+sudo apt-get -y install haproxy
 
-# Get the hostname of the server
-HOSTNAME=$(hostname)
-echo "Host name is: $HOSTNAME"
+# Backup the original haproxy.cfg
+sudo cp /etc/haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg.bak
 
-# Create a new Nginx configuration file for load balancing
-echo "Creating load balancer configuration..."
-sudo tee /etc/nginx/sites-available/load_balancer << 'EOC'
-upstream backend {
-    # Replace these with your actual web server IPs
-    server 3.86.231.113:80 weight=1;  # web-01
-    server 3.83.164.61:80 weight=1;  # web-02
-}
+# Clean haproxy.cfg (optional)
+# sudo truncate -s 0 /etc/haproxy/haproxy.cfg
 
-server {
-    listen 80 default_server;
-    listen [::]:80 default_server;
+# Check if the configuration for frontend and backend exists
+if ! grep -q "frontend alliane-frontend" /etc/haproxy/haproxy.cfg; then
+    # Add frontend and backend configuration
+    server_config="frontend alliane-frontend
+        bind *:80
+        mode http
+        default_backend alliane-backend
 
-    server_name _;
+    backend alliane-backend
+        balance roundrobin
+        server web-01 18.212.63.12:80 check
+        server web-02 44.211.248.36:80 check"
 
-    # Add custom header with hostname
-    add_header X-Served-By "$HOSTNAME";
-
-    location / {
-        proxy_pass http://backend;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-}
-EOC
-# Replace $HOSTNAME placeholder with actual hostname
-sudo sed -i "s/\\\$HOSTNAME/$HOSTNAME/" /etc/nginx/sites-available/load_balancer
-
-# Enable the new configuration and disable the default one
-sudo ln -sf /etc/nginx/sites-available/load_balancer /etc/nginx/sites-enabled/
-sudo rm -f /etc/nginx/sites-enabled/default
-
-# Test the Nginx configuration to ensure it's valid
-echo "Testing Nginx configuration..."
-sudo nginx -t
-
-# If the configuration test is successful, restart Nginx to apply changes
-if [ $? -eq 0 ]; then
-    echo "Nginx configuration is valid. Restarting Nginx..."
-    sudo systemctl restart nginx
-    echo "Nginx restarted successfully."
-    echo "Load balancer configured to distribute traffic between web-01 and web-02"
+    # Append the configuration to haproxy.cfg
+    echo "$server_config" | sudo tee -a /etc/haproxy/haproxy.cfg
 else
-    echo "Nginx configuration test failed. Please check the configuration."
-    exit 1
+    echo "Frontend and Backend configuration already exists in haproxy.cfg."
 fi
+
+# Enable HAProxy to start on boot
+echo "ENABLED=1" | sudo tee /etc/default/haproxy
+
+# Restart HAProxy service
+sudo service haproxy restart
